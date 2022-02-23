@@ -1,5 +1,6 @@
-import { domInject } from "../helpers/decorators/index";
+import { domInject, throttle } from "../helpers/decorators/index";
 import { Negociacao, NegociacaoParcial, Negociacoes } from "../models/index";
+import { NegociacaoService } from "../services/index";
 import { MensagemView, NegociacoesView } from "../views/index";
 
 export class NegociacaoController {
@@ -11,17 +12,19 @@ export class NegociacaoController {
 
     @domInject('#valor')
     private _inputValor: JQuery;
+
     private _negociacoes = new Negociacoes();
     private _negociacoesView = new NegociacoesView("#negociacoesView");
     private _mensagemView = new MensagemView("#mensagemView");
+
+    private _service = new NegociacaoService()
 
     constructor() {
         this._negociacoesView.update(this._negociacoes)
     }   
 
-    adiciona(event: Event) {
-        event.preventDefault()
-
+    @throttle()
+    adiciona() {
         let data: Date = new Date(this._inputData.val().replace(/-/g, ','))
 
         if(!this._ehDiaUtil(data)) {
@@ -44,28 +47,24 @@ export class NegociacaoController {
         return data.getDay() != DiaDaSemana.Domingo && data.getDay() != DiaDaSemana.Sabado
     }
 
+    @throttle()
     importaDados() {
-
         function isOk(res: Response) {
             if(!res.ok) {
                 throw new Error(res.statusText)
             }
             return res
         }
-        fetch('http://localhost:8080/dados')
-        .then(res => isOk(res))
-        .then(res => res.json())
-        .then((dados: NegociacaoParcial[]) => {
-            dados
-                .map(dado => new Negociacao(new Date(), dado.vezes, dado.montante))
-                .forEach(negociacao => this._negociacoes.adiciona(negociacao))
-            this._negociacoesView.update(this._negociacoes)
+        this._service.obterNegociacoes(isOk)
+        .then(negociacoes => {
+            negociacoes.forEach(negociacao => 
+                this._negociacoes.adiciona(negociacao));
+                this._negociacoesView.update(this._negociacoes)
         })
-        .catch(err => console.log(err.message))
     }
 }
 
-enum DiaDaSemana {
+    enum DiaDaSemana {
     Domingo,
     Segunda,
     Terca,
